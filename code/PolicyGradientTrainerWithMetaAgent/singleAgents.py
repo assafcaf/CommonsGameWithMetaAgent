@@ -10,7 +10,6 @@ import sys
 
 # local imports
 sys.path.append(os.path.join(os.getcwd()))
-from Danfoa_CommonsGame.agents.MetaDQNAgent.myMemory import QAgentBuffer, MetaQAgentBuffer
 
 
 class PGAgent:
@@ -226,14 +225,14 @@ class PGMetaAgent:
         action = np.random.choice(self.n_actions, p=probs)
         return action, self.action_space[action]
 
-    def store(self, observation, action, reward):
+    def store(self, state, action, reward):
         """
         store all the relevant information to memory
-        @param observation:  np.array, current state that came from environment
+        @param state:  np.array, current state that came from environment
         @param action: int, current action
         @param reward: float, current reward
         """
-        self.states.append(observation)
+        self.states.append(state)
         self.actions.append(action)
         self.rewards.append(reward)
 
