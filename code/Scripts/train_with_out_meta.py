@@ -1,7 +1,7 @@
 from datetime import date
 from Danfoa_CommonsGame.code.CommonsGame.game_environment.commons_env import HarvestCommonsEnv
 from Danfoa_CommonsGame.code.CommonsGame.game_environment.constants import SMALL_HARVEST_MAP, MEDIUM_HARVEST_MAP
-from Danfoa_CommonsGame.code.PolicyGradientTrainerWithMetaAgent.trainer import TrainerWithMetaAgent as Trainer
+from Danfoa_CommonsGame.code.PolicyGradientTrainerWithMetaAgent.trainer import TrainerNoMetaAgent as Trainer
 import os
 import warnings
 import tensorflow as tf
@@ -17,16 +17,16 @@ ep_length = 750
 lr = 0.00005
 learn_every = 1
 act_every = 25
-render_every = 2
+render_every = 50
 # init env
 env = HarvestCommonsEnv(ascii_map=MEDIUM_HARVEST_MAP, num_agents=n_players)
 state_dim = env.state_dim
 
 # set outputs directories
 num_actions = env.action_space.n
-folders_name = f"{date.today().strftime('%Y-%m-%d')}_meta_dense_256x2_{n_players}_agents"
+folders_name = f"{date.today().strftime('%Y-%m-%d')}_no_meta_dense_256x2_{n_players}_agents"
 models_directory = os.path.join(os.getcwd(), os.pardir, os.pardir, "models", folders_name)
-log_dir = os.path.join(os.getcwd(), os.pardir, os.pardir, "logsMeta", folders_name)
+log_dir = os.path.join(os.getcwd(), os.pardir, os.pardir, "logs", folders_name)
 input_shape = env.observation_space.shape
 
 # build model
@@ -37,7 +37,6 @@ meta_agent = Trainer(input_shape=input_shape,
                      models_directory=models_directory,
                      lr=lr,
                      state_dim=state_dim,
-                     act_every=act_every,
                      render_every=render_every,
                      log_dir=log_dir)
 

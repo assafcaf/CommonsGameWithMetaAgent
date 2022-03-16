@@ -295,7 +295,7 @@ class PGMetaAgent:
         """
         save the current agent neural-networks to files
         """
-        self.policy.save(os.path.join(self.save_directory, "policy_net.h5"))
+        self.policy.save(os.path.join(self.save_directory, "meta.h5"))
 
     def load(self, path):
         """
