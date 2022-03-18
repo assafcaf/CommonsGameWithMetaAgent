@@ -54,17 +54,21 @@ SMALL_HARVEST_MAP = [
 
 MEDIUM_HARVEST_MAP = [
     '@@@@@@@@@@@@@@@@@@@@@@@@@@',
-    '@P      A    A    A  P  P@',
-    '@P     AAA  AAA  AAA     @',
+    '@P   A    A    A    A   P@',
+    '@   AAA  AAA  AAA  AAA   @',
+    '@    A    A    A    A    @',
+    '@P                      P@',
+    '@       A    A    A  P   @',
+    '@      AAA  AAA  AAA     @',
     '@       A    A    A      @',
-    '@P                       @',
+    '@P                      P@',
     '@    A    A    A    A    @',
     '@   AAA  AAA  AAA  AAA   @',
-    '@P P A    A    A    A P P@',
-    '@P                       @',
+    '@P   A    A    A    A   P@',
+    '@                        @',
     '@P      A    A    A  P  P@',
-    '@P     AAA  AAA  AAA     @',
+    '@      AAA  AAA  AAA     @',
     '@       A    A    A      @',
-    '@P                       @',
+    '@P                      P@',
     '@@@@@@@@@@@@@@@@@@@@@@@@@@', ]
 

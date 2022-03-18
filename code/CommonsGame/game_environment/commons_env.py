@@ -37,35 +37,35 @@ DEFAULT_COLORMAP = {' ': [0, 0, 0],  # Black background
                     '10': AGENT_COLOR,
                     }
 
-MEDIUM_HARVEST_MAP = [
-    '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
-    '@P A P   A    A    A    A  A    A    @',
-    '@  AAA  AAA  AAA  AAA  AAAAAA  AAA   @',
-    '@ A A    A    A    A    A  A    A   P@',
-    '@PA             A      A       A     @',
-    '@ A   A    A    A    A  A A  A    A  @',
-    '@PAA AAA  AAA  AAA  AAA     AAA  AAA @',
-    '@ A   A    A  A A  A A   P   A    A  @',
-    '@PA                                P @',
-    '@ A    A    A    A    A  A    A    A @',
-    '@AAA  AAA  AAA  AAA  AA AAA  AAA  AA @',
-    '@ A    A    A    A    A  A    A    A @',
-    '@P A A A               P             @',
-    '@P  A    A    A    A       P     P   @',
-    '@  AAA  AAA  AAA  AAA         P    P @',
-    '@P  A    A    A    A   P   P  P  P   @',
-    '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@', ]
-
-SMALL_HARVEST_MAP = [
-    '@@@@@@@@@@@@@@@@@@@@@@@@@@',
-    '@P A    A    A    A  P AP@',
-    '@PAAA  AAA  AAA  AAA  AAA@',
-    '@  A    A    A    A    A @',
-    '@P                       @',
-    '@    A    A    A    A    @',
-    '@   AAA  AAA  AAA  AAA   @',
-    '@P P A    A    A    A P P@',
-    '@@@@@@@@@@@@@@@@@@@@@@@@@@', ]
+# MEDIUM_HARVEST_MAP = [
+#     '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
+#     '@P A P   A    A    A    A  A    A    @',
+#     '@  AAA  AAA  AAA  AAA  AAAAAA  AAA   @',
+#     '@ A A    A    A    A    A  A    A   P@',
+#     '@PA             A      A       A     @',
+#     '@ A   A    A    A    A  A A  A    A  @',
+#     '@PAA AAA  AAA  AAA  AAA     AAA  AAA @',
+#     '@ A   A    A  A A  A A   P   A    A  @',
+#     '@PA                                P @',
+#     '@ A    A    A    A    A  A    A    A @',
+#     '@AAA  AAA  AAA  AAA  AA AAA  AAA  AA @',
+#     '@ A    A    A    A    A  A    A    A @',
+#     '@P A A A               P             @',
+#     '@P  A    A    A    A       P     P   @',
+#     '@  AAA  AAA  AAA  AAA         P    P @',
+#     '@P  A    A    A    A   P   P  P  P   @',
+#     '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@', ]
+#
+# SMALL_HARVEST_MAP = [
+#     '@@@@@@@@@@@@@@@@@@@@@@@@@@',
+#     '@P A    A    A    A  P AP@',
+#     '@PAAA  AAA  AAA  AAA  AAA@',
+#     '@  A    A    A    A    A @',
+#     '@P                       @',
+#     '@    A    A    A    A    @',
+#     '@   AAA  AAA  AAA  AAA   @',
+#     '@P P A    A    A    A P P@',
+#     '@@@@@@@@@@@@@@@@@@@@@@@@@@', ]
 
 MAP = {"small": SMALL_HARVEST_MAP,
        "medium": MEDIUM_HARVEST_MAP}
@@ -87,7 +87,7 @@ class HarvestCommonsEnv(MapEnv):
 
         self.rewards_record = {}
         self.timeout_record = {}
-        self.spawn_prob = SPAWN_PROB
+        self.spawn_probs = SPAWN_PROB.copy()
 
         for row in range(self.base_map.shape[0]):
             for col in range(self.base_map.shape[1]):
@@ -103,6 +103,14 @@ class HarvestCommonsEnv(MapEnv):
     def observation_space(self):
         agents = list(self.agents.values())
         return agents[0].observation_space
+
+    def reset(self):
+        observations = super().reset()
+        self.spawn_probs = SPAWN_PROB.copy()
+        return observations
+
+    def reset_spawn_probs(self):
+        self.spawn_probs = SPAWN_PROB
 
     def setup_agents(self):
         map_with_agents = self.get_map_with_agents()
@@ -179,7 +187,9 @@ class HarvestCommonsEnv(MapEnv):
                                 if symbol == 'A':
                                     num_apples += 1
 
-                spawn_prob = self.spawn_prob[min(num_apples, 3)] * self.multiplier
+                self.spawn_probs *= self.multiplier
+                self.multiplier = 1
+                spawn_prob = self.spawn_probs[min(num_apples, 3)]
                 rand_num = np.random.rand(1)[0]
                 if rand_num < spawn_prob:
                     new_apple_points.append((row, col, 'A'))

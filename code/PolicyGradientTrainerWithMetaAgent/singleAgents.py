@@ -3,17 +3,14 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras as keras
 from tensorflow.keras import initializers
+from .utils import clean_memory, discounted_reward
 from tensorflow.keras.models import load_model
 from tensorflow.keras.layers import Input, Flatten, Dense, Conv2D, BatchNormalization, GlobalMaxPool2D, MaxPool2D,\
     TimeDistributed, GRU, Dropout
-import sys
-
-# local imports
-sys.path.append(os.path.join(os.getcwd()))
 
 
 class PGAgent:
-    def __init__(self, input_shape, n_actions, save_directory, gamma=0.95, lr=0.001):
+    def __init__(self, input_shape, n_actions, save_directory, gamma=0.95, lr=0.001, normalize=False):
         """
         :param input_shape: tuple, dimensions of observation in the environment
         :param n_actions: int, amount of possible actions
@@ -25,21 +22,14 @@ class PGAgent:
         self.n_actions = n_actions
         self.input_shape = input_shape
         self.save_directory = save_directory
-
+        self.normalize = normalize
         self.policy = self.__build_conv_model(lr)
 
         # create directory to save models
         if not os.path.isdir(save_directory):
             os.mkdir(save_directory)
 
-        self.states, self.actions, self.rewards = self.clean_memory()
-
-    @staticmethod
-    def clean_memory():
-        """
-        :return: return 3 empty lists
-        """
-        return [], [], []
+        self.states, self.actions, self.rewards = clean_memory()
 
     def get_action(self, obs):
         """
@@ -71,13 +61,13 @@ class PGAgent:
         """
         states = np.array(self.states)
         actions = np.array(self.actions)
-        rewards = self.discounted_reward(np.array(self.rewards))
+        discounted_rewards = self.discounted_reward(np.array(self.rewards))
 
         self.states = []
         self.actions = []
         self.rewards = []
 
-        return states, actions, rewards
+        return states, actions, discounted_rewards
 
     def discounted_reward(self, rewards):
         """
@@ -86,18 +76,12 @@ class PGAgent:
         :return np.array, discounted rewards
         """
         r = np.array(rewards)
-        discounted_r = np.zeros_like(r)
+        discounted_r = np.zeros_like(r, dtype=np.float)
         running_add = 0
-        cnt = 0
-        # run all rewards from
         for t in reversed(range(len(r))):
-            if cnt > 25:
-                running_add = 0
-                cnt = 0
             running_add = running_add * self.gamma + r[t]
             discounted_r[t] = running_add
-            cnt += 1
-        if sum(discounted_r):
+        if sum(discounted_r) and self.normalize is True:
             return (discounted_r - discounted_r.mean()) / discounted_r.std()
         else:
             return discounted_r
@@ -190,7 +174,7 @@ class PGAgent:
 
 
 class PGMetaAgent:
-    def __init__(self, input_shape, n_actions, save_directory, gamma=0.95, lr=0.001):
+    def __init__(self, input_shape, save_directory, act_every, gamma=0.95, lr=0.001, normalize=False):
         """
         @param input_shape: tuple, dimensions of states in the environment
         @param n_actions: int, amount of possible actions
@@ -199,17 +183,19 @@ class PGMetaAgent:
         @param lr: float, learning rate of neural-network
         """
         self.gamma = gamma
-        self.n_actions = n_actions
         self.input_shape = input_shape
         self.save_directory = save_directory
-        self.action_space = [.25, .5, 1, 2, 4]
+        self.action_space = [.95, .98, .99, 1.0, 1.01, 1.02, 1.05]
+        self.n_actions = len(self.action_space)
         self.policy = self.__build_conv_video_model(lr)
+        self.normalize = normalize
+        self.act_every = act_every
 
         # create directory to save models
         if not os.path.isdir(save_directory):
             os.mkdir(save_directory)
 
-        self.states, self.actions, self.rewards = [], [], []
+        self.states, self.actions, self.rewards = clean_memory()
 
     def act(self, obs):
         """
@@ -241,15 +227,15 @@ class PGMetaAgent:
         retrieve all data in memory and empy content
         :return tuple, (states, actions, discounted_rewards):
         """
-        states = np.array(self.states)
-        actions = np.array(self.actions)
-        rewards = self.discounted_reward(np.array(self.rewards))
+        states = np.array(self.states[1:])
+        actions = np.array(self.actions[1:])
+        discounted_rewards = self.discounted_reward(np.array(self.rewards[:-1]))
 
         self.states = []
         self.actions = []
         self.rewards = []
 
-        return states, actions, rewards
+        return states, actions, discounted_rewards
 
     def discounted_reward(self, rewards):
         """
@@ -262,13 +248,13 @@ class PGMetaAgent:
         running_add = 0
         cnt = 0
         for t in reversed(range(len(r))):
-            if cnt > 25:
+            if cnt > self.act_every:
                 running_add = 0
                 cnt = 0
             running_add = running_add * self.gamma + r[t]
             discounted_r[t] = running_add
             cnt += 1
-        if sum(discounted_r):
+        if sum(discounted_r) and self.normalize is True:
             return (discounted_r - discounted_r.mean()) / discounted_r.std()
         else:
             return discounted_r
@@ -287,9 +273,9 @@ class PGMetaAgent:
         """
         # get data from agent memory
         # get data from agent memory
-        states, actions, rewards = self.pop()
-        fit_result = self.policy.fit(states, actions, verbose=0, sample_weight=rewards)
-        return fit_result.history["loss"][0]
+        states, actions, discounted_rewards = self.pop()
+        loss = self.policy.train_on_batch(states, actions, sample_weight=discounted_rewards)
+        return loss
 
     def save(self):
         """
@@ -353,7 +339,6 @@ class PGMetaAgent:
             from_logits=False, name='sparse_categorical_crossentropy'
         )
         policy.compile(optimizer=keras.optimizers.Adam(learning_rate=lr), loss=loss)
-        policy.summary()
         return policy
 
     def __build_conv_video_model(self, lr):
@@ -381,7 +366,6 @@ class PGMetaAgent:
         # compile model
         loss = keras.losses.SparseCategoricalCrossentropy(from_logits=False, name='sparse_categorical_crossentropy')
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=lr), loss=loss)
-        model.summary()
         return model
 
     def build_conv_net(self):

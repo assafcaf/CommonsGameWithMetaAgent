@@ -3,8 +3,8 @@ import numpy as np
 import tensorflow as tf
 from timeit import default_timer as timer
 # local imports
-from Danfoa_CommonsGame.code.PolicyGradientTrainerWithMetaAgent.singleAgents import PGAgent, PGMetaAgent
-from Danfoa_CommonsGame.code.PolicyGradientTrainerWithMetaAgent.metrics import *
+from .singleAgents import PGAgent, PGMetaAgent
+from .metrics import *
 
 
 class TrainerWithMetaAgent:
@@ -42,13 +42,15 @@ class TrainerWithMetaAgent:
         self.writer = self.handle_callbacks(models_directory)
 
         # simple agents
-        self.agents = [PGAgent(input_shape, num_actions, lr=lr, gamma=gamma,
+        self.agents = [PGAgent(input_shape, num_actions, lr=lr, gamma=gamma, normalize=True,
                                save_directory=os.path.join(models_directory, f"PGAgent_{i}")) for i in range(n_players)]
         self.agents[0].policy.summary()
 
         # meta agent
-        self.meta_agent = PGMetaAgent(input_shape=self.meta_state_shape, n_actions=5,
+        self.meta_agent = PGMetaAgent(input_shape=self.meta_state_shape, act_every=act_every, normalize=True,
                                       save_directory=os.path.join(models_directory, f"MetaAgent"))
+
+        self.meta_agent.policy.summary()
 
     def handle_callbacks(self, models_directory):
         """
@@ -82,114 +84,125 @@ class TrainerWithMetaAgent:
 
     def train(self, env):
         """
-        train MultiDQNAgent environment with Policy Gradient meta agent
-         and Policy Gradient agents with given environment
+        train MultiAgent environment with Policy Gradient meta agent
+         and Policy Gradient agents to a given environment
         :param env: gym api environment instance
         """
         results = None
+        with self.writer.as_default() as writer:
+            # train loop
+            for ep in range(1, self.max_episodes):
 
-        # train loop
-        for ep in range(1, self.max_episodes):
-
-            # init parm for each new episode
-            total_reward = np.zeros(shape=self.n_players)
-            meta_rewards = np.zeros(shape=self.n_players)
-            n_observations = env.reset()
-            meta_state = env.get_full_state()
-            time_reward_collected = []
-            sleepers_time = []
-            start = timer()
-            agg_meta_state = np.zeros(shape=self.meta_state_shape)
-
-            # ep loop
-            for t in range(self.ep_length):
-                # render
-                if ep % self.render_every == 0 and ep > 0:
-                    title = f"ep: {ep}, frame: {t}, score: {total_reward}"
-                    env.render(title=title)
-
-                # aggregate full states for metaAgent
-                agg_meta_state[t % self.act_every, :] = meta_state
-
-                # acting in the environment
-                actions = self.choose_actions(n_observations)
-
-                # make actions
-                next_n_observations, n_rewards, n_done, n_info = env.step(actions)
+                # init parm for each new episode
+                total_reward = np.zeros(shape=self.n_players)
+                meta_rewards = np.zeros(shape=self.n_players)
+                meta_total_rewards = 0
+                n_observations = env.reset()
                 meta_state = env.get_full_state()
+                time_reward_collected = []
+                sleepers_time = []
+                start = timer()
+                agg_meta_state = np.zeros(shape=self.meta_state_shape)
+                meta_actions = []
 
-                # collect behavior data for analysis
-                time_reward_collected.extend([t for a, r in n_rewards.items() if r != 0])
-                sleepers_time.extend([1 for a, obs in n_observations.items() if obs.sum() == 0])
+                # ep loop
+                for t in range(self.ep_length):
+                    # render
+                    if ep % self.render_every == 0 and ep > 0:
+                        title = f"ep: {ep}, frame: {t}, score: {total_reward}"
+                        env.render(title=title)
 
-                # store agents (observation, action, rewards) for learning
-                for i in range(self.n_players):
-                    index = f"agent-{i}"
-                    self.agents[i].store(state=n_observations[index], action=actions[index], reward=n_rewards[index])
+                    # aggregate full states for metaAgent
+                    agg_meta_state[t % self.act_every, :] = meta_state
 
-                # meta action and storing to memory
-                if t % self.act_every == 0 and t != 0:
-                    action, multiplier = self.meta_agent.act(agg_meta_state)
-                    env.update_response_time(multiplier)
-                    r = meta_rewards.sum() * equality(meta_rewards, self.n_players)
-                    self.meta_agent.store(state=agg_meta_state, action=action, reward=r)
-                    meta_rewards = np.zeros(shape=self.n_players)
+                    # acting in the environment
+                    actions = self.choose_actions(n_observations)
 
-                # collect rewards
-                total_reward += np.fromiter(n_rewards.values(), dtype=np.int)
-                meta_rewards += np.fromiter(n_rewards.values(), dtype=np.int)
-                n_observations = next_n_observations
+                    # make actions
+                    next_n_observations, n_rewards, n_done, n_info = env.step(actions)
+                    meta_state = env.get_full_state()
 
-        # end of episode
-            # fit agents
-            results = self.fit(ep)
+                    # collect behavior data for analysis
+                    time_reward_collected.extend([t for a, r in n_rewards.items() if r != 0])
+                    sleepers_time.extend([1 for a, obs in n_observations.items() if obs.sum() == 0])
 
-            # display results
-            self.tensorboard(total_reward, time_reward_collected, sleepers_time, ep, results)
+                    # store agents (observation, action, rewards) for learning
+                    for i in range(self.n_players):
+                        index = f"agent-{i}"
+                        self.agents[i].store(state=n_observations[index], action=actions[index], reward=n_rewards[index])
 
-            # log
-            end = timer()
-            print(f"# {ep}, total_rewards: {total_reward.sum()}, time: {end-start:.2f}")
+                    # meta action and storing to memory
+                    if t % self.act_every == 0 and t != 0:
+                        action, multiplier = self.meta_agent.act(agg_meta_state)
+                        env.update_response_time(multiplier)
+                        r = meta_rewards.sum() * equality(meta_rewards, self.n_players)
+                        self.meta_agent.store(state=agg_meta_state, action=action, reward=r)
+                        meta_rewards = np.zeros(shape=self.n_players)
+                        meta_total_rewards += r
+                        meta_actions.append(multiplier)
 
-    def tensorboard(self, total_reward, time_reward_collected, sleepers_time, ep, results):
+                    # collect rewards
+                    total_reward += np.fromiter(n_rewards.values(), dtype=np.int)
+                    meta_rewards += np.fromiter(n_rewards.values(), dtype=np.int)
+                    n_observations = next_n_observations
+
+                ## end of episode
+                # fit agents
+                results = self.fit(ep)
+
+                # display results
+                self.tensorboard(total_reward=total_reward, time_reward_collected=time_reward_collected,
+                                 sleepers_time=sleepers_time, ep=ep, results=results, meta_total_rewards=meta_total_rewards,
+                                 meta_actions=np.array(meta_actions), writer=writer)
+                # log
+                end = timer()
+                print(f"# {ep}, total_rewards: {total_reward.sum()}, time: {end-start:.2f}")
+
+    def tensorboard(self, total_reward, time_reward_collected, sleepers_time, ep, results,
+                    meta_total_rewards, meta_actions, writer):
         """
             create tensorboard graph to display the algorithm progress
         :param total_reward: list, sum reward of full episode for each of the agents
         :param time_reward_collected: list,the time on which the rewards have collected
         :param sleepers_time: list, indicate when agent where out of the game due to tagging
+        :param meta_total_rewards: float, total rewards of meta agent
+        :param meta_actions: list, all actions meta agent performed
+        :param writer: tf.writer
         :param results: dictionary, results of fit method (agents and meta_agent loss and q_values)
         :param ep: int, indicate episode number
         """
-        with self.writer.as_default() as writer:
-            if results is not None:
-                learned_ep = ep
-                for k, v in results.items():
-                    tf.summary.scalar(name=k, data=v, step=learned_ep)
 
-                # histogram of agent parameters
-                agent_variable = self.agents[0].trainable_variables()
-                for i in range(len(agent_variable)):
-                    tf.summary.histogram(name=f"Agent_layer_{i}", data=tf.convert_to_tensor(agent_variable[i]), step=ep)
+        learned_ep = ep
+        for k, v in results.items():
+            tf.summary.scalar(name=k, data=v, step=learned_ep)
 
-                # histogram of metaAgent parameters
-                meta_variable = self.meta_agent.trainable_variables()
-                for i in range(len(meta_variable)):
-                    tf.summary.histogram(name=f"MetaAgent_layer_{i}", data=tf.convert_to_tensor(meta_variable[i]), step=ep)
+        # histogram of agent parameters
+        agent_variable = self.agents[0].trainable_variables()
+        for i in range(len(agent_variable)):
+            tf.summary.histogram(name=f"Agent_layer_{i}", data=tf.convert_to_tensor(agent_variable[i]), step=ep)
 
-                # display metrics
-                tf.summary.scalar(name="total_reward", data=total_reward.sum(), step=learned_ep)
+        # histogram of metaAgent parameters
+        meta_variable = self.meta_agent.trainable_variables()
+        for i in range(len(meta_variable)):
+            tf.summary.histogram(name=f"MetaAgent layer {i}", data=tf.convert_to_tensor(meta_variable[i]), step=ep)
 
-                tf.summary.scalar(name="efficiency", data=efficiency(total_reward, self.n_players, self.ep_length),
-                                  step=learned_ep)
+        # display metrics
+        tf.summary.scalar(name="total reward", data=total_reward.sum(), step=learned_ep)
 
-                tf.summary.scalar(name="sustainability", data=sustainability(time_reward_collected, self.ep_length),
-                                  step=learned_ep)
+        tf.summary.scalar(name="meta total reward", data=meta_total_rewards, step=learned_ep)
+        tf.summary.scalar(name="meta avg actions", data=meta_actions.mean(), step=learned_ep)
 
-                tf.summary.scalar(name="equality", data=equality(total_reward, self.n_players), step=learned_ep)
-                tf.summary.scalar(name="peace", data=peace(sleepers_time, self.n_players, self.ep_length),
-                                  step=learned_ep)
+        tf.summary.scalar(name="efficiency", data=efficiency(total_reward, self.n_players, self.ep_length),
+                          step=learned_ep)
 
-                writer.flush()
+        tf.summary.scalar(name="sustainability", data=sustainability(time_reward_collected, self.ep_length),
+                          step=learned_ep)
+
+        tf.summary.scalar(name="equality", data=equality(total_reward, self.n_players), step=learned_ep)
+        tf.summary.scalar(name="peace", data=peace(sleepers_time, self.n_players, self.ep_length),
+                          step=learned_ep)
+
+        writer.flush()
 
     def fit(self, ep):
         """
