@@ -42,3 +42,6 @@ def discounted_reward(rewards, gamma, normalize=False):
         return discounted_r
 
 
+def rgb2gray(rgb_arr):
+    return np.expand_dims(rgb_arr.mean(axis=-1), axis=-1)/255
+

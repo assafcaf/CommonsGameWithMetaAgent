@@ -150,7 +150,7 @@ class Agent(object):
 
     def hit(self, char):
         """Defines how an agent responds to being hit by a beam of type char"""
-        raise NotImplementedError
+        return None
 
     def consume(self, char):
         """Defines how an agent interacts with the char it is standing on"""

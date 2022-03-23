@@ -339,14 +339,16 @@ class MapEnv():
             for col_elem in range(map.shape[1]):
                 rgb_arr[row_elem, col_elem, :] = color_map[map[row_elem, col_elem]]
 
-        return rgb_arr/255
+        return rgb_arr
 
     def render(self, filename=None, title=None, wait_time=0.05):
         """ Creates an image of the map to plot or save.
 
         Args:
-            path: If a string is passed, will save the image
+            filename: If a string is passed, will save the image
                 to disk at this location.
+            title: string, title for plotting
+            wait_time: time to sleep between each frame
         """
         map_with_agents = self.get_map_with_agents()
 

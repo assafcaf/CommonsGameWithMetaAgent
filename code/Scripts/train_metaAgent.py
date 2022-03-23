@@ -6,43 +6,44 @@ import os
 import warnings
 import tensorflow as tf
 
-# tensorflow gpu usage
 warnings.filterwarnings("ignore")
-gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.5)
+# tensorflow gpu-memory usage
+gpu_options = tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.4)
 sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_options))
 
-# init DQN params
+# init params
 n_players = 5
 ep_length = 750
-lr = 0.00005
+lr = 1e-3
 learn_every = 1
 act_every = 25
-render_every = 50
-gamma = 0.975
+render_every = 25
+gamma = 0.9
+
 # init env
 env = HarvestCommonsEnv(ascii_map=MEDIUM_HARVEST_MAP, num_agents=n_players)
-state_dim = env.state_dim
+state_dim = env.state_dim[:-1] + (1,)
 
 # set outputs directories
 num_actions = env.action_space.n
-folders_name = f"{date.today().strftime('%Y-%m-%d')}_meta_dense_256x2_{n_players}_agents"
+folders_name = f"{date.today().strftime('%Y-%m-%d')}_withMeta_agents_{n_players}_notNormalize"
 models_directory = os.path.join(os.getcwd(), os.pardir, os.pardir, "models", folders_name)
 log_dir = os.path.join(os.getcwd(), os.pardir, os.pardir, "logs", "meta", folders_name)
-input_shape = env.observation_space.shape
+input_shape = env.observation_space.shape[:-1] + (1,)
 
 # build model
-meta_agent = Trainer(input_shape=input_shape,
-                     num_actions=num_actions,
-                     n_players=n_players,
-                     ep_length=ep_length,
-                     models_directory=models_directory,
-                     lr=lr,
-                     gamma=gamma,
-                     state_dim=state_dim,
-                     act_every=act_every,
-                     render_every=render_every,
-                     log_dir=log_dir)
+trainer = Trainer(input_shape=input_shape,
+                  num_actions=num_actions,
+                  n_players=n_players,
+                  ep_length=ep_length,
+                  models_directory=models_directory,
+                  lr=lr,
+                  gamma=gamma,
+                  state_dim=state_dim,
+                  act_every=act_every,
+                  render_every=render_every,
+                  log_dir=log_dir)
 
 # start training
-meta_agent.train(env)
+trainer.train(env)
 

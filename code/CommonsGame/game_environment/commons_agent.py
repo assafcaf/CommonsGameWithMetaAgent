@@ -37,7 +37,10 @@ class HarvestCommonsAgent(Agent):
     # defined in two places
     def action_map(self, action_number):
         """Maps action_number to a desired action in the map"""
-        return HARVEST_ACTIONS[action_number]
+        try:
+            return HARVEST_ACTIONS[action_number]
+        except:
+            bla=1
 
     @property
     def observation_space(self):
