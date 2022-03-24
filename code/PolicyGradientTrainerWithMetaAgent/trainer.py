@@ -1,11 +1,11 @@
 import os
-import numpy as np
 import tensorflow as tf
 from timeit import default_timer as timer
-
+from collections import deque
 # local imports
 from .singleAgents import PGAgent, PGMetaAgent, DQNAgent
 from .metrics import *
+from .utils import put_kernels_on_grid
 
 
 class TrainerWithMetaAgent:
@@ -418,9 +418,9 @@ class TrainerNoMetaAgent:
 
 
 class TrainerDQNNoMetaAgent:
-    def __init__(self, input_shape, num_actions, lr=0.00075,  n_players=1, max_episodes=50000, batch_size=512,
-                 render_every=np.inf, ep_length=150, save_every=100,  models_directory="models",  log_dir=r"logs/",
-                 gamma=0.99, buffer_size=int(1e6), epsilon_decay_rate=0.99, update_every=50, min_to_learn=50):
+    def __init__(self, input_shape, num_actions, lr, ep_length, n_players, gamma, max_episodes=50000, batch_size=512,
+                 render_every=np.inf, save_every=100,  models_directory="models",  log_dir=r"logs/", min_to_learn=50,
+                 buffer_size=int(1e6), epsilon_decay_rate=0.99, update_every=50, min_epsilon=.1, conv=False):
         """
         :param input_shape: tuple, dimensions of observation in the environment
         :param num_actions: int, amount of possible actions
@@ -443,15 +443,18 @@ class TrainerDQNNoMetaAgent:
         self.render_every = render_every
         self.ep_length = ep_length
         self.min_to_learn = min_to_learn
+        self.seq_len = input_shape[-1]
         self.save_every = save_every
         self.models_directory = models_directory
         self.log_dir = os.path.join(log_dir)
         self.writer = self.handle_callbacks(models_directory)
+        self.conv = conv
 
         # simple agents
         self.agents = [DQNAgent(input_shape, num_actions, epsilon_decay_rate=epsilon_decay_rate, batch_size=batch_size,
                                 lr=lr, gamma=gamma, save_directory=os.path.join(models_directory, f"DQAgent_{i}"),
-                                update_every=update_every, buffer_size=buffer_size)
+                                update_every=update_every, buffer_size=buffer_size, min_to_learn=min_to_learn,
+                                min_epsilon_value=min_epsilon)
                        for i in range(n_players)]
 
         self.agents[0].q_predict.summary()
@@ -505,6 +508,15 @@ class TrainerDQNNoMetaAgent:
                 time_reward_collected = []
                 sleepers_time = []
                 start = timer()
+                n_observations_deque = {f'agent-{i}': deque(maxlen=self.seq_len) for i in range(len(self.agents))}
+                n_observations_next_deque = n_observations_deque.copy()
+
+                state = dict()
+                for agent in n_observations_deque.keys():
+                    for _ in range(self.seq_len):
+                        n_observations_deque[agent].append(n_observations[agent])
+                        n_observations_next_deque[agent].append(n_observations[agent])
+                    state[agent] = np.stack(n_observations_deque[agent], axis=-1).squeeze(-2)
 
                 # ep loop
                 for t in range(self.ep_length):
@@ -514,19 +526,27 @@ class TrainerDQNNoMetaAgent:
                         env.render(title=title)
 
                     # acting in the environment
-                    actions = self.choose_actions(n_observations)
+                    actions = self.choose_actions(state)
 
                     # make actions
                     next_n_observations, n_rewards, n_done, n_info = env.step(actions)
 
-                    # collect behavior data for analysis
+                    state, next_state = dict(), dict()
+                    for agent in n_observations_deque.keys():
+                        n_observations_deque[agent].append(n_observations[agent])
+                        state[agent] = np.stack(n_observations_deque[agent], axis=-1).squeeze(-2)
+
+                        n_observations_next_deque[agent].append(next_n_observations[agent])
+                        next_state[agent] = np.stack(n_observations_next_deque[agent], axis=-1).squeeze(-2)
+
+                # collect behavior data for analysis
                     time_reward_collected.extend([t for a, r in n_rewards.items() if r != 0])
                     sleepers_time.extend([1 for a, obs in n_observations.items() if obs.sum() == 0])
 
                     # store agents (observation, action, rewards) for learning
                     for i in range(self.n_players):
                         index = f"agent-{i}"
-                        self.agents[i].store(state=n_observations[index], next_state=next_n_observations[index],
+                        self.agents[i].store(state=state[index], next_state=next_state[index],
                                              action=actions[index], reward=n_rewards[index], done=n_done[index])
 
                     # collect rewards
@@ -540,20 +560,22 @@ class TrainerDQNNoMetaAgent:
 
                     # display results
                     self.tensorboard(total_reward=total_reward, time_reward_collected=time_reward_collected,
-                                     sleepers_time=sleepers_time, ep=ep-self.min_to_learn, results=results, writer=writer)
+                                     sleepers_time=sleepers_time, ep=ep-self.min_to_learn, results=results,
+                                     writer=writer, epsilon=self.agents[0].epsilon)
 
                 # log
                 end = timer()
                 print(f"# {ep}, total_rewards: {total_reward.sum()}, time: {end-start:.2f},"
                       f" epsilon: {self.agents[0].epsilon:.2f}")
 
-    def tensorboard(self, total_reward, time_reward_collected, sleepers_time, ep, results, writer):
+    def tensorboard(self, total_reward, time_reward_collected, sleepers_time, ep, results, epsilon, writer):
         """
             create tensorboard graph to display the algorithm progress
         :param total_reward: list, sum reward of full episode for each of the agents
         :param time_reward_collected: list,the time on which the rewards have collected
         :param sleepers_time: list, indicate when agent where out of the game due to tagging
         :param writer: tf.writer
+        :param epsilon, current exploration rate of DQN agents
         :param results: dictionary, results of fit method (agents and meta_agent loss and q_values)
         :param ep: int, indicate episode number
         """
@@ -564,7 +586,7 @@ class TrainerDQNNoMetaAgent:
 
         # display metrics
         tf.summary.scalar(name="total reward", data=total_reward.sum(), step=learned_ep)
-
+        tf.summary.scalar(name="epsilon", data=epsilon, step=learned_ep)
         tf.summary.scalar(name="efficiency", data=efficiency(total_reward, self.n_players, self.ep_length),
                           step=learned_ep)
 
@@ -574,7 +596,9 @@ class TrainerDQNNoMetaAgent:
         tf.summary.scalar(name="equality", data=equality(total_reward, self.n_players), step=learned_ep)
         tf.summary.scalar(name="peace", data=peace(sleepers_time, self.n_players, self.ep_length),
                           step=learned_ep)
-
+        if ep % 20 == 0 and self.conv is True:
+            grid = put_kernels_on_grid(self.agents[0].q_predict.trainable_weights[0])
+            tf.summary.image(f"filters layer 1", grid, step=ep)
         writer.flush()
 
     def fit(self, ep):

@@ -19,18 +19,17 @@ class QAgentBuffer:
         self.terminal_memory = np.zeros(self.mem_size)
 
     def store(self, state, state_, action, reward, done):
-        if state is not None and state_ is not None:
-            index = self.mem_cntr % self.mem_size
-            self.state_memory[index] = state
-            self.new_state_memory[index] = state_
-            self.reward_memory[index] = reward
-            self.terminal_memory[index] = 1 - int(done)
-            if self.discrete:
-                actions = np.zeros(self.n_actions)
-                actions[action] = 1
-                self.action_memory[index] = actions
-            else:
-                self.action_memory[index] = action
+        index = self.mem_cntr % self.mem_size
+        self.state_memory[index] = state
+        self.new_state_memory[index] = state_
+        self.reward_memory[index] = reward
+        self.terminal_memory[index] = 1 - int(done)
+        if self.discrete:
+            actions = np.zeros(self.n_actions)
+            actions[action] = 1
+            self.action_memory[index] = actions
+        else:
+            self.action_memory[index] = action
             self.mem_cntr += 1
 
     def sample_buffer(self, batch_size):

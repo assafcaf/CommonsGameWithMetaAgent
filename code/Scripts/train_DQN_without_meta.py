@@ -14,16 +14,17 @@ sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(gpu_options=gpu_opti
 # init params
 n_players = 5
 ep_length = 750
-lr = 1e-4
+lr = 5e-4
 learn_every = 1
 render_every = 500
 gamma = 0.99
 buffer_size = int(1e5)
-batch_size = 64
-epsilon_decay_rate = 0.9975
+batch_size = 512
+epsilon_decay_rate = 0.9985
 update_every = 25
-min_to_learn = 50
-
+min_to_learn = 10
+min_epsilon = 0.1
+seq_len = 1
 # init env
 env = HarvestCommonsEnv(ascii_map=MEDIUM_HARVEST_MAP, num_agents=n_players)
 state_dim = env.state_dim
@@ -33,7 +34,7 @@ num_actions = env.action_space.n
 folders_name = f"{date.today().strftime('%Y-%m-%d')}_withOutMeta_agents_{n_players}_DQN"
 models_directory = os.path.join(os.getcwd(), os.pardir, os.pardir, "models", folders_name)
 log_dir = os.path.join(os.getcwd(), os.pardir, os.pardir, "logs", "DQN", folders_name)
-input_shape = env.observation_space.shape
+input_shape = env.observation_space.shape[:-1] + (seq_len,)
 
 # build model
 trainer = Trainer(input_shape=input_shape,
@@ -45,6 +46,7 @@ trainer = Trainer(input_shape=input_shape,
                   update_every=update_every,
                   gamma=gamma,
                   min_to_learn=min_to_learn,
+                  min_epsilon=min_epsilon,
                   render_every=render_every,
                   log_dir=log_dir,
                   buffer_size=buffer_size,

@@ -379,16 +379,14 @@ class DQNAgent:
     instances = 0
 
     def __init__(self, input_shape, n_actions, save_directory, gamma=0.995, lr=0.001, min_epsilon_value=0.15,
-                 batch_size=512, buffer_size=int(1e6), epsilon_decay_rate=0.985, update_every=50):
+                 batch_size=512, buffer_size=int(1e6), epsilon_decay_rate=0.985, update_every=50, min_to_learn=50):
         """
         @param input_shape: tuple, dimensions of states in the environment
         @param n_actions: int, amount of possible actions
         @param save_directory: str, path to where to save neural-network to
         @param gamma: float, DQN parameter (usually in range of 0.95-1)
         @param lr: float, learning rate of neural-network
-        @param loss: str/ tk.keras.losses.<loss> , specified the loss function of the neural-network ("mse", "mae", "tf.keras.losses.Huber()")
         @param min_epsilon_value: float, min value of epsilon
-        @param greedy: bool, indicates whether to use the epsilon greedy method
         @param batch_size: int, batch size of model.fit
         @param buffer_size: int, size of replay buffer
         """
@@ -400,12 +398,13 @@ class DQNAgent:
         self.epsilon = 1
         self.epsilon_decay_rate = epsilon_decay_rate
         self.min_epsilon_value = min_epsilon_value
+        self.min_to_learn = min_to_learn
         self.batch_siz = batch_size
         self.buffer_size = buffer_size
         self.update_every = update_every
 
         self.optimizer = keras.optimizers.Adam(learning_rate=lr, epsilon=1e-6)
-        self.q_predict, self.q_target = self.__build_conv_model(lr)
+        self.q_predict, self.q_target = self.__build_dense_model(lr)
 
         # create directory to save models
         if not os.path.isdir(save_directory):
@@ -419,14 +418,12 @@ class DQNAgent:
         @param obs: np.array, state that came from environment
         @return: int, indicate which action to take according to agent prediction
         """
-        action = 0
-        if obs.sum() != 0:
-            if random.random() < self.epsilon:
-                action = random.randint(0, self.n_actions-1)
-            else:
-                q_values = self.q_predict.call(tf.convert_to_tensor(np.array([obs]))).numpy().flatten()
-                action = np.argmax(q_values)
-        return action
+        if obs.sum() == 0:
+            return np.random.choice(self.n_actions, size=1, p=[1/self.n_actions] * self.n_actions)[0]
+        q_values = self.q_predict.call(tf.convert_to_tensor(np.array([obs]))).numpy().flatten()
+        q_norm = (q_values - q_values.min()) / (q_values.max() - q_values.min())
+        p = q_norm/q_norm.sum()
+        return np.random.choice(self.n_actions, size=1, p=p)[0]
 
     def store(self, state, next_state, action, reward, done):
         """
@@ -443,7 +440,7 @@ class DQNAgent:
     def fit(self, ep):
         """
             implementation of DQN fit method
-        @param update_target: bool, specifies whether to update the target network
+        @param ep: int, current episode in learning phase
         @return: float, the loss value according to keras model.fit
         """
         # get data from agent memory
@@ -452,23 +449,23 @@ class DQNAgent:
 
         states, next_states, actions, rewards, done = self.memory.sample_buffer(self.batch_siz)
 
-        q_eval = self.q_predict.predict(states)
-        q_next = self.q_target.predict(next_states)
+        q_eval = self.q_predict.call(tf.convert_to_tensor(states)).numpy()
+        q_next = self.q_target.call(tf.convert_to_tensor(next_states)).numpy()
 
         q_target = q_eval.copy()
 
         batch_index = np.arange(self.batch_siz, dtype=np.int8)
 
-        future_reward = np.max(q_next, axis=1)*done
+        future_reward = np.max(q_next, axis=1)
         q_target[batch_index, actions] = rewards + self.gamma*future_reward
 
-        loss = self.q_predict.train_on_batch(states, q_target)
+        history = self.q_predict.fit(states, q_target, verbose=0, batch_size=self.batch_siz)
         if update_target:
             self.q_target.set_weights(self.q_predict.get_weights())
 
         max_predicted_reward = q_eval.max(axis=1).mean()
-        self.epsilon = self.epsilon*self.epsilon_decay_rate
-        return loss, max_predicted_reward
+        self.epsilon = self.epsilon*self.epsilon_decay_rate if self.epsilon >= self.min_epsilon_value else self.epsilon
+        return history.history['loss'][0], max_predicted_reward
 
     def fit_tape(self, ep):
         update_target = (ep % self.update_every == 0)
@@ -502,14 +499,6 @@ class DQNAgent:
         self.q_net.save(q_file_name)
         self.q_net_target.save(target_file_name)
 
-    def set_epsilon(self, value):
-        """
-            set new agent epsilon value
-        @param value: float, in range og 0-1
-        """
-        if self.epsilon > self.min_epsilon_value:
-            self.epsilon = value
-
     def load(self, path):
         """
             load agent neural-network from files
@@ -531,21 +520,50 @@ class DQNAgent:
         """
         _input = Input(shape=self.input_shape)
         normalize = Lambda(lambda x: x/255)(_input)
-        conv1 = Conv2D(filters=32, kernel_size=8, strides=4, activation='relu',
-                       kernel_initializer=initializers.VarianceScaling(scale=2), padding='same', use_bias=True)(normalize)
-        conv2 = Conv2D(filters=64, kernel_size=4, strides=5, activation='relu', padding="same",
-                       kernel_initializer=initializers.VarianceScaling(scale=2),  use_bias=True)(conv1)
-        conv3 = Conv2D(filters=64, kernel_size=3, strides=1, activation='relu', padding="same",
-                       kernel_initializer=initializers.VarianceScaling(scale=2),  use_bias=True)(conv2)
-        flatten = Flatten()(conv3)
+        conv1 = Conv2D(filters=128, kernel_size=5, strides=1, activation='relu',
+                       kernel_initializer=initializers.RandomNormal(stddev=0.01), padding='same', use_bias=True)(normalize)
+        conv2 = Conv2D(filters=32, kernel_size=3, strides=1, activation='relu', padding="same",
+                       kernel_initializer=initializers.RandomNormal(stddev=0.01),  use_bias=True)(conv1)
+        conv3 = Conv2D(filters=32, kernel_size=3, strides=1, activation='relu', padding="same",
+                       kernel_initializer=initializers.RandomNormal(stddev=0.01),  use_bias=True)(conv1)
+        mp = MaxPool2D(pool_size=(2, 2), strides=(2, 2))(conv3)
+        flatten = Flatten()(mp)
         dense1 = Dense(128, activation='relu',
-                       kernel_initializer=initializers.VarianceScaling(scale=2), use_bias=True)(flatten)
+                       kernel_initializer=initializers.RandomNormal(stddev=0.01), use_bias=True)(flatten)
+        dense2 = Dense(64, activation='relu',
+                       kernel_initializer=initializers.RandomNormal(stddev=0.01), use_bias=True)(dense1)
         q = Dense(self.n_actions, activation='linear',
-                  kernel_initializer=initializers.VarianceScaling(scale=2), use_bias=True)(dense1)
+                  kernel_initializer=initializers.RandomNormal(stddev=0.01), use_bias=True)(dense2)
 
         q_predict = keras.Model(inputs=_input, outputs=q)
         q_predict.compile(optimizer=keras.optimizers.Adam(learning_rate=lr), loss='mse')
         q_target = keras.models.clone_model(q_predict)
 
+        q_predict.trainable = True
+        q_target.trainable = True
         return q_predict, q_target
 
+    def __build_dense_model(self, lr):
+        """
+        build keras.Sequential conv model
+        @param lr: float, learning rate
+        @return: keras.Sequential model
+        """
+        _input = Input(shape=self.input_shape)
+        normalize = Lambda(lambda x: x/255)(_input)
+
+        flatten = Flatten()(normalize)
+        dense1 = Dense(32, activation='relu',
+                       kernel_initializer=initializers.RandomNormal(stddev=0.01), use_bias=True)(flatten)
+        dense2 = Dense(32, activation='relu',
+                       kernel_initializer=initializers.RandomNormal(stddev=0.01), use_bias=True)(dense1)
+        q = Dense(self.n_actions, activation='linear',
+                  kernel_initializer=initializers.RandomNormal(stddev=0.01), use_bias=True)(dense2)
+
+        q_predict = keras.Model(inputs=_input, outputs=q)
+        q_predict.compile(optimizer=keras.optimizers.Adam(learning_rate=lr), loss='mse')
+        q_target = keras.models.clone_model(q_predict)
+
+        q_predict.trainable = True
+        q_target.trainable = True
+        return q_predict, q_target

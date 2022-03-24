@@ -202,7 +202,7 @@ class MapEnv():
             agent.grid = map_with_agents
             rgb_arr = self.map_to_colors(agent.get_state(), self.color_map)
             rgb_arr = self.rotate_view(agent.orientation, rgb_arr)
-            observations[agent.agent_id] = rgb_arr
+            observations[agent.agent_id] = np.expand_dims(rgb_arr.mean(axis=-1), axis=-1)  # to gray scale
             rewards[agent.agent_id] = agent.compute_reward()
             dones[agent.agent_id] = agent.get_done()
         dones["__all__"] = np.any(list(dones.values()))
@@ -248,7 +248,7 @@ class MapEnv():
             # agent.grid = util.return_view(map_with_agents, agent.pos,
             #                               agent.row_size, agent.col_size)
             rgb_arr = self.map_to_colors(agent.get_state(), self.color_map)
-            observations[agent.agent_id] = rgb_arr
+            observations[agent.agent_id] = np.expand_dims(rgb_arr.mean(axis=-1), axis=-1)
         return observations
 
     @property
