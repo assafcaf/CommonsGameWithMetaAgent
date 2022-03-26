@@ -16,12 +16,12 @@ n_players = 5
 ep_length = 750
 lr = 5e-4
 learn_every = 1
-render_every = 500
+render_every = 200
 gamma = 0.99
 buffer_size = int(1e5)
-batch_size = 512
+batch_size = 256
 epsilon_decay_rate = 0.9985
-update_every = 25
+update_every = 50
 min_to_learn = 10
 min_epsilon = 0.1
 seq_len = 1
@@ -31,10 +31,10 @@ state_dim = env.state_dim
 
 # set outputs directories
 num_actions = env.action_space.n
-folders_name = f"{date.today().strftime('%Y-%m-%d')}_withOutMeta_agents_{n_players}_DQN"
+folders_name = f"{date.today().strftime('%Y-%m-%d')}_noMeta_{n_players}_DQN_128_64"
 models_directory = os.path.join(os.getcwd(), os.pardir, os.pardir, "models", folders_name)
 log_dir = os.path.join(os.getcwd(), os.pardir, os.pardir, "logs", "DQN", folders_name)
-input_shape = env.observation_space.shape[:-1] + (seq_len,)
+input_shape = env.observation_space.shape
 
 # build model
 trainer = Trainer(input_shape=input_shape,

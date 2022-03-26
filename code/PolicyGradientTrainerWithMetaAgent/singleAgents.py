@@ -420,6 +420,7 @@ class DQNAgent:
         """
         if obs.sum() == 0:
             return np.random.choice(self.n_actions, size=1, p=[1/self.n_actions] * self.n_actions)[0]
+
         q_values = self.q_predict.call(tf.convert_to_tensor(np.array([obs]))).numpy().flatten()
         q_norm = (q_values - q_values.min()) / (q_values.max() - q_values.min())
         p = q_norm/q_norm.sum()
@@ -434,8 +435,7 @@ class DQNAgent:
         @param reward: float, the immediate reward that came from the environment according to current state and action the agent took
         @param done: bool, indicate if the episode is finish
         """
-        if state.sum() != 0:
-            self.memory.store(state, next_state, action, reward, done)
+        self.memory.store(state, next_state, action, reward, done)
 
     def fit(self, ep):
         """
@@ -553,9 +553,9 @@ class DQNAgent:
         normalize = Lambda(lambda x: x/255)(_input)
 
         flatten = Flatten()(normalize)
-        dense1 = Dense(32, activation='relu',
+        dense1 = Dense(128, activation='relu',
                        kernel_initializer=initializers.RandomNormal(stddev=0.01), use_bias=True)(flatten)
-        dense2 = Dense(32, activation='relu',
+        dense2 = Dense(64, activation='relu',
                        kernel_initializer=initializers.RandomNormal(stddev=0.01), use_bias=True)(dense1)
         q = Dense(self.n_actions, activation='linear',
                   kernel_initializer=initializers.RandomNormal(stddev=0.01), use_bias=True)(dense2)

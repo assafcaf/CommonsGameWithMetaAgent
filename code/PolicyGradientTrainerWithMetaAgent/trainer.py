@@ -511,12 +511,12 @@ class TrainerDQNNoMetaAgent:
                 n_observations_deque = {f'agent-{i}': deque(maxlen=self.seq_len) for i in range(len(self.agents))}
                 n_observations_next_deque = n_observations_deque.copy()
 
-                state = dict()
-                for agent in n_observations_deque.keys():
-                    for _ in range(self.seq_len):
-                        n_observations_deque[agent].append(n_observations[agent])
-                        n_observations_next_deque[agent].append(n_observations[agent])
-                    state[agent] = np.stack(n_observations_deque[agent], axis=-1).squeeze(-2)
+                # state = dict()
+                # for agent in n_observations_deque.keys():
+                #     for _ in range(self.seq_len):
+                #         n_observations_deque[agent].append(n_observations[agent])
+                #         n_observations_next_deque[agent].append(n_observations[agent])
+                #     state[agent] = np.stack(n_observations_deque[agent], axis=-1).squeeze(-2)
 
                 # ep loop
                 for t in range(self.ep_length):
@@ -526,18 +526,18 @@ class TrainerDQNNoMetaAgent:
                         env.render(title=title)
 
                     # acting in the environment
-                    actions = self.choose_actions(state)
+                    actions = self.choose_actions(n_observations)
 
                     # make actions
                     next_n_observations, n_rewards, n_done, n_info = env.step(actions)
 
-                    state, next_state = dict(), dict()
-                    for agent in n_observations_deque.keys():
-                        n_observations_deque[agent].append(n_observations[agent])
-                        state[agent] = np.stack(n_observations_deque[agent], axis=-1).squeeze(-2)
-
-                        n_observations_next_deque[agent].append(next_n_observations[agent])
-                        next_state[agent] = np.stack(n_observations_next_deque[agent], axis=-1).squeeze(-2)
+                    # state, next_state = dict(), dict()
+                    # for agent in n_observations_deque.keys():
+                    #     n_observations_deque[agent].append(n_observations[agent])
+                    #     state[agent] = np.stack(n_observations_deque[agent], axis=-1).squeeze(-2)
+                    #
+                    #     n_observations_next_deque[agent].append(next_n_observations[agent])
+                    #     next_state[agent] = np.stack(n_observations_next_deque[agent], axis=-1).squeeze(-2)
 
                 # collect behavior data for analysis
                     time_reward_collected.extend([t for a, r in n_rewards.items() if r != 0])
@@ -546,7 +546,7 @@ class TrainerDQNNoMetaAgent:
                     # store agents (observation, action, rewards) for learning
                     for i in range(self.n_players):
                         index = f"agent-{i}"
-                        self.agents[i].store(state=state[index], next_state=next_state[index],
+                        self.agents[i].store(state=n_observations[index], next_state=next_n_observations[index],
                                              action=actions[index], reward=n_rewards[index], done=n_done[index])
 
                     # collect rewards
