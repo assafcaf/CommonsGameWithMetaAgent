@@ -5,7 +5,7 @@ from collections import deque
 # local imports
 from .singleAgents import PGAgent, PGMetaAgent, DQNAgent
 from .metrics import *
-from .utils import put_kernels_on_grid
+from .utils import put_kernels_on_grid, log_configuration
 
 
 class TrainerWithMetaAgent:
@@ -234,11 +234,10 @@ class TrainerWithMetaAgent:
 
 
 class TrainerNoMetaAgent:
-    def __init__(self, input_shape, state_dim, num_actions, lr=0.00075,  n_players=1, max_episodes=50000,
+    def __init__(self, input_shape, num_actions, lr=0.00075,  n_players=1, max_episodes=50000,
                  render_every=np.inf, ep_length=150, save_every=100,  models_directory="models",  log_dir=r"logs/",
                  gamma=0.99):
         """
-        :param state_dim: tuple, dimensions of full states in the environment
         :param input_shape: tuple, dimensions of observation in the environment
         :param num_actions: int, amount of possible actions
         :param gamma: float, discount factor parameter (usually in range of 0.95-1)
@@ -268,6 +267,8 @@ class TrainerNoMetaAgent:
         self.agents = [PGAgent(input_shape, num_actions, lr=lr, gamma=gamma, normalize=False,
                                save_directory=os.path.join(models_directory, f"PGAgent_{i}")) for i in range(n_players)]
         self.agents[0].policy.summary()
+
+        log_configuration(self)
 
     def handle_callbacks(self, models_directory):
         """
@@ -443,6 +444,7 @@ class TrainerDQNNoMetaAgent:
         self.render_every = render_every
         self.ep_length = ep_length
         self.min_to_learn = min_to_learn
+        self.lr = lr
         self.seq_len = input_shape[-1]
         self.save_every = save_every
         self.models_directory = models_directory
@@ -458,6 +460,7 @@ class TrainerDQNNoMetaAgent:
                        for i in range(n_players)]
 
         self.agents[0].q_predict.summary()
+        log_configuration(self)
 
     def handle_callbacks(self, models_directory):
         """

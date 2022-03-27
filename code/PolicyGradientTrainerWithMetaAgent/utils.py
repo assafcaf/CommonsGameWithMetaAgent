@@ -2,7 +2,7 @@ import os
 import numpy as np
 from math import sqrt
 import tensorflow as tf
-
+import json
 
 def save_frames_as_gif(frames, path='./', filename='gym_animation.gif'):
     if not os.path.isdir(path):
@@ -99,3 +99,25 @@ def put_kernels_on_grid(kernel, pad=1):
 
     # scaling to [0, 255] is not necessary for tensorboard
     return x
+
+
+def log_configuration(trainer):
+    config_path = os.path.join(trainer.models_directory, "config.txt")
+    architecture_path = os.path.join(trainer.models_directory, "architecture.txt")
+    architecture_code = trainer.agents[0].get_architecture_code()
+    configuration = {"gamma": trainer.gamma,
+                     "n_players": trainer.n_players,
+                     "learning_rate": trainer.lr,
+                     "input_shape": trainer.agents[0].input_shape,
+                     "batch_siz": trainer.agents[0].batch_siz,
+                     "update_every": trainer.agents[0].update_every,
+                    }
+    json_object = json.dumps(configuration, indent=4)
+
+    # jason configuration file
+    with open(config_path, "w") as outfile:
+        outfile.write(json_object)
+
+    # network architecture code
+    with open(config_path, "a") as outfile:
+        outfile.write(architecture_code)

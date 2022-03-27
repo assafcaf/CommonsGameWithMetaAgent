@@ -7,6 +7,7 @@ import tensorflow.keras as keras
 from .myMemory import QAgentBuffer
 from tensorflow.keras import initializers
 from .utils import clean_memory
+import inspect
 from tensorflow.keras.models import load_model
 from tensorflow.keras.layers import Input, Flatten, Dense, Conv2D, GlobalMaxPool2D, MaxPool2D, TimeDistributed,\
      GRU, Lambda
@@ -404,6 +405,7 @@ class DQNAgent:
         self.update_every = update_every
 
         self.optimizer = keras.optimizers.Adam(learning_rate=lr, epsilon=1e-6)
+
         self.q_predict, self.q_target = self.__build_dense_model(lr)
 
         # create directory to save models
@@ -423,8 +425,12 @@ class DQNAgent:
 
         q_values = self.q_predict.call(tf.convert_to_tensor(np.array([obs]))).numpy().flatten()
         q_norm = (q_values - q_values.min()) / (q_values.max() - q_values.min())
-        p = q_norm/q_norm.sum()
-        return np.random.choice(self.n_actions, size=1, p=p)[0]
+
+        if random.random() <= self.epsilon:
+            p = q_norm/q_norm.sum()
+            return np.random.choice(self.n_actions, size=1, p=p)[0]
+        else:
+            return q_norm.argmax()
 
     def store(self, state, next_state, action, reward, done):
         """
@@ -509,8 +515,11 @@ class DQNAgent:
         q_net_target_file = os.path.join(path, "q_net_target.h5")
 
         # load models
-        self.q_net = load_model(q_net_file)
-        self.q_net_target = load_model(q_net_target_file)
+        self.q_predict = load_model(q_net_file)
+        self.q_target = load_model(q_net_target_file)
+
+    def get_architecture_code(self):
+        return inspect.getsource(self.__build_dense_model)
 
     def __build_conv_model(self, lr):
         """
@@ -553,9 +562,9 @@ class DQNAgent:
         normalize = Lambda(lambda x: x/255)(_input)
 
         flatten = Flatten()(normalize)
-        dense1 = Dense(128, activation='relu',
+        dense1 = Dense(512, activation='relu',
                        kernel_initializer=initializers.RandomNormal(stddev=0.01), use_bias=True)(flatten)
-        dense2 = Dense(64, activation='relu',
+        dense2 = Dense(512, activation='relu',
                        kernel_initializer=initializers.RandomNormal(stddev=0.01), use_bias=True)(dense1)
         q = Dense(self.n_actions, activation='linear',
                   kernel_initializer=initializers.RandomNormal(stddev=0.01), use_bias=True)(dense2)
