@@ -269,8 +269,7 @@ class MapEnv():
 
         for agent_id, agent in self.agents.items():
             # If agent is not within map, skip.
-            if not (agent.pos[0] >= 0 and agent.pos[0] < grid.shape[0] and
-                    agent.pos[1] >= 0 and agent.pos[1] < grid.shape[1]):
+            if not (0 <= agent.pos[0] < grid.shape[0] and 0 <= agent.pos[1] < grid.shape[1]):
                 continue
 
             grid[agent.pos[0], agent.pos[1]] = 'P'
@@ -290,11 +289,9 @@ class MapEnv():
         grid = np.copy(self.world_map)
 
         for agent_id, agent in self.agents.items():
-            char_id = str(int(agent_id[-1]) + 1)
-
+            char_id = str(1 + (agent.get_total_rewards() // 10))
             # If agent is not within map, skip.
-            if not(agent.pos[0] >= 0 and agent.pos[0] < grid.shape[0] and
-                   agent.pos[1] >= 0 and agent.pos[1] < grid.shape[1]):
+            if not(0 <= agent.pos[0] < grid.shape[0] and 0 <= agent.pos[1] < grid.shape[1]):
                 continue
 
             grid[agent.pos[0], agent.pos[1]] = char_id

@@ -1,7 +1,7 @@
 from datetime import date
-from Danfoa_CommonsGame.code.CommonsGame.game_environment.commons_env import HarvestCommonsEnv
-from Danfoa_CommonsGame.code.CommonsGame.game_environment.constants import SMALL_HARVEST_MAP, MEDIUM_HARVEST_MAP
-from Danfoa_CommonsGame.code.PolicyGradientTrainerWithMetaAgent.trainer import TrainerNoMetaAgent as Trainer
+from code.CommonsGame.game_environment.commons_env import HarvestCommonsEnv
+from code.CommonsGame.game_environment.constants import SMALL_HARVEST_MAP, MEDIUM_HARVEST_MAP
+from code.PolicyGradientTrainerWithMetaAgent.trainer import TrainerNoMetaAgent as Trainer
 import os
 import warnings
 import tensorflow as tf
@@ -38,7 +38,6 @@ trainer = Trainer(input_shape=input_shape,
                   ep_length=ep_length,
                   models_directory=models_directory,
                   lr=lr,
-                  state_dim=state_dim,
                   gamma=gamma,
                   render_every=render_every,
                   log_dir=log_dir)

@@ -49,6 +49,7 @@ class Agent(object):
         self.row_size = row_size
         self.col_size = col_size
         self.reward_this_turn = 0
+        self.total_rewards = 0
 
     @property
     def action_space(self):
@@ -77,13 +78,19 @@ class Agent(object):
         """
         raise NotImplementedError
 
+    def get_total_rewards(self):
+        return self.total_rewards
+
+    def reset_total_rewards(self):
+        self.total_rewards = 0
+
     def action_map(self, action_number):
         """Maps action_number to a desired action in the map"""
         raise NotImplementedError
 
     def get_state(self):
         return utility_funcs.return_view(self.grid, self.get_pos(),
-                           self.row_size, self.col_size)
+                                         self.row_size, self.col_size)
 
     def get_meta_state(self):
         return utility_funcs.return_view(self.grid, self.get_pos(),
@@ -92,6 +99,7 @@ class Agent(object):
     def compute_reward(self):
         reward = self.reward_this_turn
         self.reward_this_turn = 0
+        self.total_rewards += reward
         return reward
 
     def set_pos(self, new_pos):

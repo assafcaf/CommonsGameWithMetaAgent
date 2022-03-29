@@ -37,6 +37,16 @@ DEFAULT_COLORMAP = {' ': [0, 0, 0],  # Black background
                     '10': AGENT_COLOR,
                     }
 
+RANKED_COLORMAP = {' ': [0, 0, 0],  # Black background
+                   '0': [0, 0, 0],  # Black background beyond map walls
+                   '': [180, 180, 180],  # Grey board walls
+                   '@': [180, 180, 180],  # Grey board walls
+                   'A': [0, 255, 0],  # Green apples
+                   'F': [255, 255, 0],  # Yellow fining beam
+                   'P': [159, 67, 255]}  # Purple player
+for i in range(1, 25):
+    RANKED_COLORMAP[str(i)] = [255, i*10, i*10]
+
 # MEDIUM_HARVEST_MAP = [
 #     '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@',
 #     '@P A P   A    A    A    A  A    A    @',
@@ -76,7 +86,7 @@ class HarvestCommonsEnv(MapEnv):
     def __init__(self, ascii_map=HARVEST_MAP, num_agents=1, agent_view_range=HARVEST_DEFAULT_VIEW_SIZE,
                  color_map=None):
         if color_map is None:
-            color_map = DEFAULT_COLORMAP
+            color_map = RANKED_COLORMAP
         self.apple_points = []
         self.agent_view_range = agent_view_range
 
@@ -107,6 +117,7 @@ class HarvestCommonsEnv(MapEnv):
     def reset(self):
         observations = super().reset()
         self.spawn_probs = SPAWN_PROB.copy()
+        [agent.reset_total_rewards() for agent in self.agents.values()]
         return observations
 
     def reset_spawn_probs(self):
@@ -255,4 +266,3 @@ class HarvestCommonsEnv(MapEnv):
         peace = (self.num_agents * episode_steps - timeout_steps) / self.num_agents
 
         return efficiency, equality, sustainability, peace
-

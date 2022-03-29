@@ -426,11 +426,8 @@ class DQNAgent:
         q_values = self.q_predict.call(tf.convert_to_tensor(np.array([obs]))).numpy().flatten()
         q_norm = (q_values - q_values.min()) / (q_values.max() - q_values.min())
 
-        if random.random() <= self.epsilon:
-            p = q_norm/q_norm.sum()
-            return np.random.choice(self.n_actions, size=1, p=p)[0]
-        else:
-            return q_norm.argmax()
+        p = q_norm/q_norm.sum()
+        return np.random.choice(self.n_actions, size=1, p=p)[0]
 
     def store(self, state, next_state, action, reward, done):
         """
@@ -502,8 +499,8 @@ class DQNAgent:
         """
         q_file_name = os.path.join(self.save_directory, "q_net.h5")
         target_file_name = os.path.join(self.save_directory, "q_net_target.h5")
-        self.q_net.save(q_file_name)
-        self.q_net_target.save(target_file_name)
+        self.q_predict.save(q_file_name)
+        self.q_target.save(target_file_name)
 
     def load(self, path):
         """

@@ -1,10 +1,11 @@
 import os
+import numpy as np
 import tensorflow as tf
 from timeit import default_timer as timer
 from collections import deque
 # local imports
 from .singleAgents import PGAgent, PGMetaAgent, DQNAgent
-from .metrics import *
+from .metrics import get_metrics
 from .utils import put_kernels_on_grid, log_configuration
 
 
@@ -445,7 +446,7 @@ class TrainerDQNNoMetaAgent:
         self.ep_length = ep_length
         self.min_to_learn = min_to_learn
         self.lr = lr
-        self.seq_len = input_shape[-1]
+        self.seq_len = input_shape[0]
         self.save_every = save_every
         self.models_directory = models_directory
         self.log_dir = os.path.join(log_dir)
@@ -514,12 +515,12 @@ class TrainerDQNNoMetaAgent:
                 n_observations_deque = {f'agent-{i}': deque(maxlen=self.seq_len) for i in range(len(self.agents))}
                 n_observations_next_deque = n_observations_deque.copy()
 
-                # state = dict()
-                # for agent in n_observations_deque.keys():
-                #     for _ in range(self.seq_len):
-                #         n_observations_deque[agent].append(n_observations[agent])
-                #         n_observations_next_deque[agent].append(n_observations[agent])
-                #     state[agent] = np.stack(n_observations_deque[agent], axis=-1).squeeze(-2)
+                state, next_state = dict(), dict()
+                for agent in n_observations_deque.keys():
+                    for _ in range(self.seq_len):
+                        n_observations_deque[agent].append(n_observations[agent])
+                        n_observations_next_deque[agent].append(n_observations[agent])
+                    state[agent] = np.stack(n_observations_deque[agent], axis=0)
 
                 # ep loop
                 for t in range(self.ep_length):
@@ -529,80 +530,86 @@ class TrainerDQNNoMetaAgent:
                         env.render(title=title)
 
                     # acting in the environment
-                    actions = self.choose_actions(n_observations)
+                    actions = self.choose_actions(state)
 
                     # make actions
                     next_n_observations, n_rewards, n_done, n_info = env.step(actions)
 
-                    # state, next_state = dict(), dict()
-                    # for agent in n_observations_deque.keys():
-                    #     n_observations_deque[agent].append(n_observations[agent])
-                    #     state[agent] = np.stack(n_observations_deque[agent], axis=-1).squeeze(-2)
-                    #
-                    #     n_observations_next_deque[agent].append(next_n_observations[agent])
-                    #     next_state[agent] = np.stack(n_observations_next_deque[agent], axis=-1).squeeze(-2)
+                    for agent in n_observations_deque.keys():
+                        n_observations_deque[agent].append(n_observations[agent])
+                        state[agent] = np.stack(n_observations_deque[agent], axis=0)
 
-                # collect behavior data for analysis
+                        n_observations_next_deque[agent].append(next_n_observations[agent])
+                        next_state[agent] = np.stack(n_observations_next_deque[agent], axis=0)
+
+                    # collect behavior data for analysis
                     time_reward_collected.extend([t for a, r in n_rewards.items() if r != 0])
                     sleepers_time.extend([1 for a, obs in n_observations.items() if obs.sum() == 0])
 
                     # store agents (observation, action, rewards) for learning
                     for i in range(self.n_players):
                         index = f"agent-{i}"
-                        self.agents[i].store(state=n_observations[index], next_state=next_n_observations[index],
+                        self.agents[i].store(state=state[index], next_state=next_state[index],
                                              action=actions[index], reward=n_rewards[index], done=n_done[index])
 
                     # collect rewards
                     total_reward += np.fromiter(n_rewards.values(), dtype=np.int)
                     n_observations = next_n_observations
 
-                # end of episode
+            # end of episode
                 # fit agents
                 if ep > self.min_to_learn:
                     results = self.fit(ep)
 
                     # display results
-                    self.tensorboard(total_reward=total_reward, time_reward_collected=time_reward_collected,
-                                     sleepers_time=sleepers_time, ep=ep-self.min_to_learn, results=results,
-                                     writer=writer, epsilon=self.agents[0].epsilon)
+                    self.tensorboard(total_reward=total_reward, ep=ep-self.min_to_learn, results=results, writer=writer,
+                                     epsilon=self.get_current_epsilon(), env=env,
+                                     time_reward_collected=time_reward_collected, sleepers_time=sleepers_time)
 
                 # log
                 end = timer()
                 print(f"# {ep}, total_rewards: {total_reward.sum()}, time: {end-start:.2f},"
                       f" epsilon: {self.agents[0].epsilon:.2f}")
 
-    def tensorboard(self, total_reward, time_reward_collected, sleepers_time, ep, results, epsilon, writer):
+    def tensorboard(self, total_reward, ep, results, epsilon, writer, env, time_reward_collected, sleepers_time):
         """
             create tensorboard graph to display the algorithm progress
         :param total_reward: list, sum reward of full episode for each of the agents
+        :param writer: tf writer
         :param time_reward_collected: list,the time on which the rewards have collected
         :param sleepers_time: list, indicate when agent where out of the game due to tagging
-        :param writer: tf.writer
         :param epsilon, current exploration rate of DQN agents
         :param results: dictionary, results of fit method (agents and meta_agent loss and q_values)
         :param ep: int, indicate episode number
+        :param env: environment instance
         """
-
+        # metrics params
+        eq, sus, p, ef = get_metrics(total_reward, self.n_players, self.ep_length, sleepers_time, time_reward_collected)
+        rewards = total_reward.sum()
         learned_ep = ep
+
+        # display fit results
         for k, v in results.items():
             tf.summary.scalar(name=k, data=v, step=learned_ep)
 
         # display metrics
-        tf.summary.scalar(name="total reward", data=total_reward.sum(), step=learned_ep)
+        tf.summary.scalar(name="total reward", data=rewards, step=learned_ep)
         tf.summary.scalar(name="epsilon", data=epsilon, step=learned_ep)
-        tf.summary.scalar(name="efficiency", data=efficiency(total_reward, self.n_players, self.ep_length),
-                          step=learned_ep)
+        tf.summary.scalar(name="efficiency", data=ef, step=learned_ep)
+        tf.summary.scalar(name="sustainability", data=sus, step=learned_ep)
+        tf.summary.scalar(name="equality", data=eq, step=learned_ep)
+        tf.summary.scalar(name="peace", data=p, step=learned_ep)
 
-        tf.summary.scalar(name="sustainability", data=sustainability(time_reward_collected, self.ep_length),
-                          step=learned_ep)
-
-        tf.summary.scalar(name="equality", data=equality(total_reward, self.n_players), step=learned_ep)
-        tf.summary.scalar(name="peace", data=peace(sleepers_time, self.n_players, self.ep_length),
-                          step=learned_ep)
+        # display conv filters as images
         if ep % 20 == 0 and self.conv is True:
             grid = put_kernels_on_grid(self.agents[0].q_predict.trainable_weights[0])
             tf.summary.image(f"filters layer 1", grid, step=ep)
+
+        # write data to log file
         writer.flush()
+
+    def get_current_epsilon(self):
+        return self.agents[0].epsilon
 
     def fit(self, ep):
         """

@@ -50,4 +50,9 @@ def efficiency(total_rewards, n_players, ep_length):
     return sum(total_rewards) / (n_players * ep_length)
 
 
-
+def get_metrics(total_rewards, n_players, ep_length, sleepers_time, time_reward_collected):
+    eq = equality(total_rewards, n_players)
+    sus = sustainability(time_reward_collected, ep_length)
+    p = peace(sleepers_time, n_players, ep_length)
+    eff = efficiency(total_rewards, n_players, ep_length)
+    return eq, sus, p, eff
