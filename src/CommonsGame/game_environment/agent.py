@@ -17,7 +17,7 @@ BASE_ACTIONS = {0: 'MOVE_LEFT',  # Move left
                 2: 'MOVE_UP',  # Move up
                 3: 'MOVE_DOWN',  # Move down
                 4: 'STAY',  # don't move
-                5: 'TURN_CLOCKWISE',  # Rotate counter clockwise
+                5: 'TURN_CLOCKWISE',  # Rotate counter-clockwise
                 6: 'TURN_COUNTERCLOCKWISE'}  # Rotate clockwise
 
 

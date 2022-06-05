@@ -113,7 +113,7 @@ class MapEnv():
     def get_agent_current_rewards(self, agent):
         return self.agents[agent].get_current_reward()
 
-    def get_total_current_rewards(self):
+    def get_mean_total_current_rewards(self):
         s = 0
         for _, agent in self.agents.items():
             s += agent.get_current_reward()

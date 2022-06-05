@@ -422,7 +422,7 @@ class TrainerNoMetaAgent:
 
 
 class TrainerDQNNoMetaAgent:
-    def __init__(self, input_shape, num_actions, lr, ep_length, n_players, gamma, max_episodes=50000, batch_size=512,
+    def __init__(self, input_shape, num_actions, lr, ep_length, n_players, gamma, max_episodes=3000, batch_size=512,
                  render_every=np.inf, save_every=5, models_directory="models", log_dir=r"logs/", min_to_learn=50,
                  buffer_size=int(1e6), epsilon_decay_rate=0.99, update_every=50, min_epsilon=.1, conv=False, gifs="",
                  save_gif_every=100):
@@ -531,7 +531,7 @@ class TrainerDQNNoMetaAgent:
                         env.render(title=title)
 
                     # acting in the environment
-                    actions = self.choose_actions_epsilon(n_observations)
+                    actions = self.choose_actions(n_observations)
 
                     # make actions
                     next_n_observations, n_rewards, n_done, n_info = env.step(actions)
@@ -539,9 +539,10 @@ class TrainerDQNNoMetaAgent:
                     # collect behavior data for analysis
                     time_reward_collected.extend([t for a, r in n_rewards.items() if r != 0])
                     sleepers_time.extend([1 for a, obs in n_observations.items() if obs.sum() == 0])
-                    apple_state_on_tagged.extend([(env.get_agent_current_rewards(a),
-                                                   env.get_total_current_rewards())
-                                                  for a, obs in n_observations.items() if obs.sum() == 0])
+                    apple_state_on_tagged.extend([env.get_agent_current_rewards(a)/env.get_mean_total_current_rewards()
+                                                  if env.get_mean_total_current_rewards() != 0 else 0
+                                                  for a, obs in n_observations.items()
+                                                  if obs.sum() == 0])
 
                     # store agents (observation, action, rewards) for learning
                     for i in range(self.n_players):
@@ -555,8 +556,7 @@ class TrainerDQNNoMetaAgent:
 
                     # save frames of this episode
                     frames.append(Image.fromarray(np.uint8(env.get_full_state())).resize(size=(400, 180),
-                                                                                         resample=PIL.Image.BOX).convert(
-                        "RGB"))
+                                  resample=PIL.Image.BOX).convert("RGB"))
 
                 # end of episode
                 # fit agents
@@ -566,9 +566,8 @@ class TrainerDQNNoMetaAgent:
                     # display results
                     self.tensorboard(total_reward=total_reward, ep=ep - self.min_to_learn, results=results,
                                      writer=writer,
-                                     epsilon=self.get_current_epsilon(), env=env,
-                                     time_reward_collected=time_reward_collected, sleepers_time=sleepers_time,
-                                     apple_state_on_tagged=apple_state_on_tagged)
+                                     epsilon=self.get_current_epsilon(), apple_state_on_tagged=apple_state_on_tagged,
+                                     time_reward_collected=time_reward_collected, sleepers_time=sleepers_time)
 
                 # save agents models to files
                 if ep > self.save_every:
@@ -582,7 +581,7 @@ class TrainerDQNNoMetaAgent:
                 print(f"# {ep}, total_rewards: {total_reward.sum()}, time: {end - start:.2f},"
                       f" epsilon: {self.agents[0].epsilon:.2f}")
 
-    def tensorboard(self, total_reward, ep, results, epsilon, writer, env, time_reward_collected, sleepers_time,
+    def tensorboard(self, total_reward, ep, results, epsilon, writer, time_reward_collected, sleepers_time,
                     apple_state_on_tagged):
         """
             create tensorboard graph to display the algorithm progress
@@ -600,7 +599,6 @@ class TrainerDQNNoMetaAgent:
         eq, sus, p, ef = get_metrics(total_reward, self.n_players, self.ep_length, sleepers_time, time_reward_collected)
         rewards = total_reward.sum()
         learned_ep = ep
-        # asot, trot = tuple(zip(*apple_state_on_tagged))
 
         # display fit results
         for k, v in results.items():
@@ -613,9 +611,8 @@ class TrainerDQNNoMetaAgent:
         tf.summary.scalar(name="sustainability", data=sus, step=learned_ep)
         tf.summary.scalar(name="equality", data=eq, step=learned_ep)
         tf.summary.scalar(name="peace", data=p, step=learned_ep)
-        # tf_apple_state_on_tagged = tf.summary.scalar(name="apple state on tagged", data=np.mean(asot)/25, step=learned_ep),
-        # tf_tagged_rewards = tf.summary.scalar(name="tagged rewards", data=np.mean(trot)/25, step=learned_ep),
-        # tf.summary.merge_all([tf_apple_state_on_tagged, tf_tagged_rewards])
+        tf.summary.scalar(name="apple state on tagged", data=np.mean(apple_state_on_tagged), step=learned_ep),
+
 
         # display conv filters as images
         if ep % 20 == 0 and self.conv is True:

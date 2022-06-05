@@ -88,10 +88,10 @@ class HarvestCommonsEnv(MapEnv):
         self.apple_points = []
         self.agent_view_range = agent_view_range
 
-        if c_map == "DEFAULT":
-            color_map = DEFAULT_COLORMAP
-        else:
+        if c_map == "colors":
             color_map = RANKED_COLORMAP
+        else:
+            color_map = DEFAULT_COLORMAP
 
         super().__init__(ascii_map, num_agents, color_map=color_map)
 

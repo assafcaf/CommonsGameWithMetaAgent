@@ -1,5 +1,5 @@
-from Danfoa_CommonsGame.code.CommonsGame.game_environment.commons_env import HarvestCommonsEnv
-from Danfoa_CommonsGame.code.CommonsGame.game_environment.constants import SMALL_HARVEST_MAP, MEDIUM_HARVEST_MAP
+from game_environment.commons_env import HarvestCommonsEnv
+from game_environment.constants import SMALL_HARVEST_MAP, MEDIUM_HARVEST_MAP
 import numpy as np
 EPISODES = 10
 N_PLAYERS = 5
